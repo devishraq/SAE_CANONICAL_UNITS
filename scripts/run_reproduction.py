@@ -24,7 +24,7 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
 
 def run_gpt2_experiment():
     model = load_model("gpt2")
-    acts = get_activations(model, layer=8, n_tokens=4096)
+    acts = get_activations(model, layer=8, n_tokens=1024)
 
     small_768, small_4k, large_16k, large_32k = load_gpt2_small_saes()
     small = small_4k
@@ -46,7 +46,7 @@ def run_gpt2_experiment():
 
 def run_gemma_experiment():
     model = load_model("google/gemma-2-2b", use_remote=True)  
-    acts = get_activations(model, layer=10, n_tokens=4096)
+    acts = get_activations(model, layer=10, n_tokens=1024)
 
     small, large = load_gemma_2b_saes()
     res = run_one_width(acts, small, large, thresh=0.4, bs=4096)  
@@ -57,7 +57,7 @@ def run_gemma_experiment():
 
 def run_pythia_experiment():
     model = load_model("EleutherAI/pythia-160m-deduped")
-    acts = get_activations(model, layer=4, n_tokens=4096)
+    acts = get_activations(model, layer=4, n_tokens=1024)
 
     small, large = load_pythia_saes()
     res = run_one_width(acts, small, large, thresh=0.7)
