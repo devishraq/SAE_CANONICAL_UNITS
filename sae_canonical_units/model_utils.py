@@ -2,15 +2,13 @@ import torch
 from datasets import load_dataset
 from nnterp import StandardizedTransformer
 
-def load_model(name="gpt2", use_remote=False):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Loading {name} on {device}...")
-    return StandardizedTransformer(name, device=device)
+def load_model(name="gpt2"):
+    print(f"Loading {name} (float16)...")
+    return StandardizedTransformer(name, torch_dtype=torch.float16)
 
 def get_activations(model, layer=8, n_tokens=1024):
     print(f"Extracting activations at layer {layer}...")
     ds = load_dataset("NeelNanda/pile-10k", split="train")
-
     text = " ".join([ds[i]["text"] for i in range(3)])[:15000]
 
     inputs = model.tokenizer(
@@ -23,9 +21,7 @@ def get_activations(model, layer=8, n_tokens=1024):
     with model.trace(inputs):
         resid = model.layers[layer].output[0].save()
 
-    acts = resid.value[0]
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    acts = resid.value[0].reshape(-1, acts.shape[-1])[:n_tokens].float().detach().to(model.device)
 
-    acts = acts.reshape(-1, acts.shape[-1])[:n_tokens].detach().to(device)
     print(f"Extracted activations shape: {acts.shape}")
     return acts
