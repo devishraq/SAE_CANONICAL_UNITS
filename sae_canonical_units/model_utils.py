@@ -1,11 +1,12 @@
 import torch
 from datasets import load_dataset
 from nnterp import StandardizedTransformer
+from nnsight import LanguageModel
 
 def load_model(name="gpt2", use_remote=False):
     print(f"Loading {name} remote={use_remote}...")
     if use_remote:
-        return StandardizedTransformer(name, remote=True)
+        return LanguageModel(name, remote=True)
     else:
         return StandardizedTransformer(name, device_map="auto", torch_dtype=torch.float16)
 
@@ -23,7 +24,10 @@ def get_activations(model, layer=8, n_tokens=1024, use_remote=False):
 
     with torch.no_grad():
         with model.trace(inputs, remote=use_remote):
-            resid = resid = model.layers_output[layer].save()
+            if use_remote:
+                resid = model.layers_output[layer].save()
+            else:
+                resid = model.layers_output[layer].save()
 
     acts = resid.value if hasattr(resid, "value") else resid
     if hasattr(acts, "value"):
