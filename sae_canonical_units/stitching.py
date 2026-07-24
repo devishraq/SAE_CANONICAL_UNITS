@@ -1,16 +1,24 @@
+# sae_canonical_units/stitching.py
 import torch
 import torch.nn.functional as F
 
 def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap=200, min_improvement=0.0):
-    device = sae_small.W_dec.device 
+    device = sae_small.W_dec.device
     acts = acts.to(device)
-
-    
     with torch.no_grad():
         z_s = sae_small.encode(acts)
         x_s = sae_small.decode(z_s)
         E = acts - x_s
+
         base_mse = (E**2).mean().item()
+
+        acts_mean = acts.mean(dim=0)
+        acts_var = ((acts - acts_mean)**2).mean().item()
+        acts_mean_sq = (acts**2).mean().item()
+        nmse = base_mse / (acts_mean_sq + 1e-8) # vs zero baseline
+        explained_variance = 1.0 - base_mse / (acts_var + 1e-8)
+        rms_x = (acts_mean_sq ** 0.5)
+        rmse = (base_mse ** 0.5)
 
         small_n = F.normalize(sae_small.W_dec, dim=1)
         large_n = F.normalize(sae_large.W_dec, dim=1)
@@ -19,7 +27,13 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         cand_idx = torch.where(max_sim < thresh)[0]
 
         if len(cand_idx) == 0:
-            return {"novel_fraction": 0.0, "ci_low": 0.0, "ci_high": 0.0, "n_candidates_geo": 0, "n_novel_func": 0, "base_mse": base_mse}
+            return {
+                "novel_fraction": 0.0, "ci_low": 0.0, "ci_high": 0.0,
+                "n_candidates_geo": 0, "n_novel_func": 0,
+                "base_mse": base_mse, "nmse": nmse,
+                "explained_variance": explained_variance,
+                "rms_act": rms_x, "rmse": rmse
+            }
 
         z_l = sae_large.encode(acts)
         z_cand = z_l[:, cand_idx]
@@ -49,4 +63,16 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         boot_t = torch.tensor(boot, dtype=torch.float32)
         ci_low, ci_high = torch.quantile(boot_t, torch.tensor([0.025, 0.975])).tolist()
 
-    return {"novel_fraction": float(novel_frac), "ci_low": float(ci_low), "ci_high": float(ci_high), "n_candidates_geo": int(len(cand_idx)), "n_novel_func": int(n_novel), "base_mse": float(base_mse)}
+    return {
+        "novel_fraction": float(novel_frac),
+        "ci_low": float(ci_low), "ci_high": float(ci_high),
+        "n_candidates_geo": int(len(cand_idx)),
+        "n_novel_func": int(n_novel),
+        "base_mse": float(base_mse),
+        "nmse": float(nmse), # <-- now comparable
+        "explained_variance": float(explained_variance),
+        "rms_act": float(rms_x),
+        "rmse": float(rmse),
+        "acts_mean_sq": float(acts_mean_sq),
+        "acts_var": float(acts_var),
+    }
