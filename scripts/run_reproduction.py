@@ -37,7 +37,7 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
 def run_gpt2_experiment():
     print("\n=== GPT2 Small (Local T4) ===")
     model = load_model("gpt2", use_remote=False)
-    acts = get_activations(model, "gpt2", layer=8, hook_type="pre", n_tokens=40960)
+    acts = get_activations(model, "gpt2", layer=8, hook_type="pre", n_tokens=40960, use_remote=False)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
@@ -79,7 +79,7 @@ def run_gpt2_experiment():
 def run_pythia_experiment():
     print("\n=== PYTHIA 70M (Local T4) ===")
     model = load_model("EleutherAI/pythia-70m-deduped", use_remote=False)
-    acts = get_activations(model, "pythia", layer=3, hook_type="post", n_tokens=40960)
+    acts = get_activations(model, "pythia", layer=3, hook_type="post", n_tokens=40960, use_remote=False)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
@@ -107,7 +107,7 @@ def run_pythia_experiment():
 def run_gemma_experiment():
     print("\n=== GEMMA 9B IT (Remote NDIF) ===")
     model = load_model("google/gemma-2-9b-it", use_remote=True)
-    acts = get_activations(model, "gemma", layer=20, hook_type="post", n_tokens=40960)
+    acts = get_activations(model, "gemma", layer=20, hook_type="post", n_tokens=40960, use_remote=True)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
@@ -135,7 +135,7 @@ def run_gemma_experiment():
 def run_llama_experiment():
     print("\n=== LLAMA 3.1 8B (Remote NDIF) ===")
     model = load_model("meta-llama/Llama-3.1-8B", use_remote=True)
-    acts = get_activations(model, "llama", layer=12, hook_type="post", n_tokens=40960)
+    acts = get_activations(model, "llama", layer=12, hook_type="post", n_tokens=40960, use_remote=True)
     del model
     torch.cuda.empty_cache(); gc.collect()
 

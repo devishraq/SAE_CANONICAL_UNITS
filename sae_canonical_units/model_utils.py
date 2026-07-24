@@ -5,12 +5,10 @@ from nnsight import LanguageModel
 
 def load_model(name="gpt2", use_remote=False):
     print(f"Loading {name} remote={use_remote} (float16)...")
-    if use_remote:
-        return LanguageModel(name, remote=True)
-    else:
-        return LanguageModel(name, device_map="auto", torch_dtype=torch.float16)
+    # Do NOT pass remote=True here. Pass it to model.trace() instead.
+    return LanguageModel(name, device_map="auto", torch_dtype=torch.float16)
 
-def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, batch_size=1024):
+def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, batch_size=1024, use_remote=False):
     print(f"Extracting {n_tokens} activations at layer {layer} ({hook_type}) (batched)...")
     ds = load_dataset("NeelNanda/pile-10k", split="train")
     
@@ -27,15 +25,22 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, b
         batch = input_ids[i:i+batch_size].unsqueeze(0)
         if batch.shape[1] == 0: break
             
-        with model.trace(batch):
+        # FIX: remote=True MUST go here, not in the model loader
+        with model.trace(batch, remote=use_remote):
             if "gpt2" in model_name:
                 resid = model.transformer.h[extract_layer].output[0].save()
             elif "pythia" in model_name:
                 resid = model.gpt_neox.layers[extract_layer].output[0].save()
-            else:
+            else: # Llama & Gemma
                 resid = model.model.layers[extract_layer].output[0].save()
+        
+        # FIX: Safely handle tensor vs proxy return
+        if hasattr(resid, 'value'):
+            acts = resid.value[0]
+        else:
+            acts = resid[0]
                 
-        acts = resid.value[0].float().cpu()
+        acts = acts.float().cpu()
         all_acts.append(acts)
         
     acts = torch.cat(all_acts, dim=0)[:n_tokens]
