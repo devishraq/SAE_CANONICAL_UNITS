@@ -31,12 +31,12 @@ def run_gpt2_experiment():
 
     results = []
     results.append({
-        "width": "16384",
+        "width": "12288",
         "results": run_one_width(acts, small, large_16k, thresh=0.7, do_meta=True, do_control=True)
     })
 
     results.append({
-        "width": "32768",
+        "width": "24576",
         "results": run_one_width(acts, small, large_32k, thresh=0.7, do_meta=False, do_control=False)
     })
 
@@ -45,7 +45,7 @@ def run_gpt2_experiment():
     return results
 
 def run_gemma_experiment():
-    model = load_model("google/gemma-2-2b", use_remote=True)  
+    model = load_model("google/gemma-2-2b")  
     acts = get_activations(model, layer=10, n_tokens=1024)
 
     small, large = load_gemma_2b_saes()
@@ -56,8 +56,8 @@ def run_gemma_experiment():
     return [{"width": "65k", "results": res}]
 
 def run_pythia_experiment():
-    model = load_model("EleutherAI/pythia-160m-deduped")
-    acts = get_activations(model, layer=4, n_tokens=1024)
+    model = load_model("EleutherAI/pythia-70m-deduped")
+    acts = get_activations(model, layer=3, n_tokens=1024)
 
     small, large = load_pythia_saes()
     res = run_one_width(acts, small, large, thresh=0.7)
@@ -72,7 +72,7 @@ def main():
     for name, fn in [
         ("gpt2_small_L8", run_gpt2_experiment),
         ("gemma_2b_L10", run_gemma_experiment),
-        ("pythia_160m_L4", run_pythia_experiment),
+        ("pythia_70m_L3", run_pythia_experiment),
     ]:
         try:
             all_results[name] = fn()
