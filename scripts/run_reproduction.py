@@ -9,6 +9,7 @@ from sae_canonical_units.sae_loader import (
     load_gpt2_small_saes, load_gpt2_small_big, load_gpt2_small_98k,
     load_gemma_2b_saes, load_gemma_2b_big, load_gemma_2b_1m,
     load_pythia_saes,
+    load_llama_31_8b_saes
 )
 from sae_canonical_units.stitching import stitching_novel_fraction
 
@@ -41,11 +42,11 @@ def run_gpt2_experiment():
 
     results = []
     
-    # We define a list of tuples: (Label, Loader Function, thresh, do_meta, do_control)
+    # (Label, Loader Function, thresh, do_meta, do_control)
     widths_to_test = [
         ("12288", load_gpt2_small_saes, 0.7, True, True),
         ("24576", load_gpt2_small_big, 0.7, False, False),
-        ("98304", load_gpt2_small_98k, 0.7, False, False) # 98k might OOM meta-sae, so disabled
+        ("98304", load_gpt2_small_98k, 0.7, False, False) 
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -77,7 +78,7 @@ def run_gemma_experiment():
     widths_to_test = [
         ("65k", load_gemma_2b_saes, 0.4, False, False),
         ("262k", load_gemma_2b_big, 0.4, False, False),
-        ("1m", load_gemma_2b_1m, 0.4, False, False) # 1M SAE is massive, likely to OOM meta-sae
+        ("1m", load_gemma_2b_1m, 0.4, False, False)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -111,12 +112,29 @@ def run_pythia_experiment():
     torch.cuda.empty_cache(); gc.collect()
     return [{"width": "16k", "results": res}]
 
+def run_llama_experiment():
+    print("\n=== LLAMA 3.1 8B (Remote NDIF) ===")
+    model = load_model("meta-llama/Llama-3.1-8B", use_remote=True)
+    acts = get_activations(model, layer=12, n_tokens=1024)
+    
+    del model
+    torch.cuda.empty_cache(); gc.collect()
+
+    small, large = load_llama_31_8b_saes()
+    # 131k width SAE is huge, keep batch size high and skip meta-sae to be safe
+    res = run_one_width(acts, small, large, thresh=0.7, do_meta=False, do_control=False, bs=4096)
+    
+    del small, large, acts
+    torch.cuda.empty_cache(); gc.collect()
+    return [{"width": "131k", "results": res}]
+
 def main():
     all_results = {}
     for name, fn in [
         ("gpt2_small_L8", run_gpt2_experiment),
         ("gemma_2b_L10", run_gemma_experiment),
         ("pythia_70m_L3", run_pythia_experiment),
+        ("llama_31_8b_L12", run_llama_experiment),
     ]:
         try:
             all_results[name] = fn()
