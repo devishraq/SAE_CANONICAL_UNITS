@@ -78,8 +78,8 @@ def run_pythia_experiment():
     return [{"width": "16k", "results": res}]
 
 def run_gemma_experiment():
-    print("\n=== GEMMA 9B (Remote NDIF) ===")
-    model = load_model("google/gemma-2-9b", use_remote=True)
+    print("\n=== GEMMA 9B IT (Remote NDIF) ===")
+    model = load_model("google/gemma-2-9b-it", use_remote=True)
     acts = get_activations(model, layer=20, n_tokens=1024, use_remote=True)
     del model
     torch.cuda.empty_cache(); gc.collect()
@@ -125,7 +125,7 @@ def main():
     for name, fn in [
         ("gpt2_small_L8", run_gpt2_experiment),
         ("pythia_70m_L3", run_pythia_experiment),
-        ("gemma_9b_L20", run_gemma_experiment),
+        ("gemma_9b_it_L20", run_gemma_experiment),
         ("llama_31_8b_L12", run_llama_experiment)
     ]:
         try:
