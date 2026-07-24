@@ -3,7 +3,9 @@ import torch
 import torch.nn.functional as F
 
 def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap=200, min_improvement=0.0):
-    device = acts.device
+    device = sae_small.W_dec.device
+    acts = acts.to(device)
+    
     with torch.no_grad():
         z_s = sae_small.encode(acts)
         x_s = sae_small.decode(z_s)

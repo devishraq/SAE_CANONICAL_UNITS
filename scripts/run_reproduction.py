@@ -26,6 +26,7 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
 def run_gpt2_experiment():
     model = load_model("gpt2")
     acts = get_activations(model, layer=8, n_tokens=1024)
+    acts = acts.cuda()
 
     small_768, small_4k, large_16k, large_32k = load_gpt2_small_saes()
     small = small_4k
