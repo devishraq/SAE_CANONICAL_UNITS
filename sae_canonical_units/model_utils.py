@@ -3,9 +3,9 @@ from datasets import load_dataset
 from nnterp import StandardizedTransformer
 
 def load_model(name="gpt2", use_remote=False):
-    print(f"Loading {name} (float16) remote={use_remote}...")
+    print(f"Loading {name} remote={use_remote}...")
     if use_remote:
-        return StandardizedTransformer(name, torch_dtype=torch.float16)
+        return StandardizedTransformer(name, remote=True)
     else:
         return StandardizedTransformer(name, device_map="auto", torch_dtype=torch.float16)
 
@@ -26,7 +26,6 @@ def get_activations(model, layer=8, n_tokens=1024, use_remote=False):
             resid = resid = model.layers_output[layer].save()
 
     acts = resid.value if hasattr(resid, "value") else resid
-
     if hasattr(acts, "value"):
         acts = acts.value
 
