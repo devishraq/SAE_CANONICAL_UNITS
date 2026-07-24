@@ -1,3 +1,4 @@
+import gc
 import json
 import traceback
 import torch
@@ -44,14 +45,20 @@ def run_gpt2_experiment():
     torch.cuda.empty_cache()
     return results
 
+#OPTIMIZATION INTRODUCED
 def run_gemma_experiment():
-    model = load_model("google/gemma-2-2b")  
-    acts = get_activations(model, layer=10, n_tokens=1024)
+    model = load_model("google/gemma-2-2b")
+    acts = get_activations(model, layer=10, n_tokens=1024) 
+    acts = acts.cpu() # move off GPU
+
+    del model
+    torch.cuda.empty_cache()
+    gc.collect()
 
     small, large = load_gemma_2b_saes()
-    res = run_one_width(acts, small, large, thresh=0.4, bs=4096)  
+    res = run_one_width(acts.cuda(), small, large, thresh=0.4, bs=4096)
 
-    del model, acts, small, large
+    del small, large
     torch.cuda.empty_cache()
     return [{"width": "65k", "results": res}]
 
