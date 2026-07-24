@@ -8,8 +8,9 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         z_s = sae_small.encode(acts)
         x_s = sae_small.decode(z_s)
         E = acts - x_s
+        E = E.to(sae_small.W_dec.dtype) # Match dtypes to prevent crashes
 
-        base_mse = (E**2).mean().item()
+        base_mse = (E.float()**2).mean().item()
         acts_mean = acts.mean(dim=0)
         acts_var = ((acts - acts_mean)**2).mean().item()
         acts_mean_sq = (acts**2).mean().item()
@@ -21,7 +22,6 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         small_n = F.normalize(sae_small.W_dec, dim=1)
         large_n = F.normalize(sae_large.W_dec, dim=1)
         
-        # CHUNKED SIMILARITY COMPUTATION TO PREVENT T4 OOM
         max_sim = torch.empty(large_n.shape[0], device=device)
         chunk_size = 8192
         for i in range(0, large_n.shape[0], chunk_size):
@@ -40,14 +40,17 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             }
 
         z_l = sae_large.encode(acts)
-        z_cand = z_l[:, cand_idx]
+        z_cand = z_l[:, cand_idx].to(E.dtype)
         dec_cand = sae_large.W_dec[cand_idx]
 
         z_norm2 = (z_cand**2).sum(0)
         dec_norm2 = (dec_cand**2).sum(1)
         norm_C2 = z_norm2 * dec_norm2
-        S = torch.einsum("nc,nd->cd", z_cand, E)
-        dot_EC = (S * dec_cand).sum(1)
+        
+        # MEMORY-OPTIMIZED DOT PRODUCT
+        # Replaces the 1.6GB einsum with a 400MB matmul!
+        dot_EC = (z_cand * (E @ dec_cand.T)).sum(0)
+        
         improves = (2*dot_EC - norm_C2) > min_improvement
 
         n_novel = improves.sum().item()
@@ -59,8 +62,10 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             idx = torch.randint(0, N, (N,), device=device)
             Eb = E[idx]
             z_cb = z_cand[idx]
-            Sb = torch.einsum("nc,nd->cd", z_cb, Eb)
-            dot_b = (Sb * dec_cand).sum(1)
+            
+            # MEMORY-OPTIMIZED DOT PRODUCT FOR BOOTSTRAP
+            dot_b = (z_cb * (Eb @ dec_cand.T)).sum(0)
+            
             norm_b = (z_cb**2).sum(0) * dec_norm2
             boot.append(((2*dot_b - norm_b) > min_improvement).sum().item() / sae_large.W_dec.shape[0])
 
