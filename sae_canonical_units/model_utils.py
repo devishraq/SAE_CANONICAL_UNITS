@@ -10,12 +10,12 @@ def load_model(name="gpt2", use_remote=False):
     else:
         return LanguageModel(name, device_map="auto", torch_dtype=torch.float16)
 
-def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, batch_size=1024, use_remote=False):
+def get_activations(model, model_name, layer, hook_type="pre", n_tokens=8192, batch_size=256, use_remote=False):
     print(f"Extracting {n_tokens} activations at layer {layer} ({hook_type}) (batched)...")
     ds = load_dataset("NeelNanda/pile-10k", split="train")
     
     random.seed(42)
-    indices = random.sample(range(len(ds)), 50)
+    indices = random.sample(range(len(ds)), 20)
     raw_text = " ".join([ds[i]["text"] for i in indices])
     
     input_ids = model.tokenizer(raw_text, return_tensors="pt")["input_ids"][0]
@@ -35,13 +35,16 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, b
             else: # Llama & Gemma
                 resid = model.model.layers[extract_layer].output[0].save()
         
-        if hasattr(resid, 'value'):
-            acts = resid.value[0]
-        else:
-            acts = resid[0]
-                
-        acts = acts.float().cpu()
-        all_acts.append(acts)
+        # Handle nnsight returning either a Proxy or a Tensor
+        acts_tensor = resid.value if hasattr(resid, 'value') else resid
+        
+        # CRITICAL FIX: Ensure tensor is 2D [N, d_model]
+        if acts_tensor.dim() == 3:
+            acts_tensor = acts_tensor[0] # Remove batch dimension if present
+            
+        # Explicitly reshape to [seq_len, d_model] to prevent 1D flattening
+        acts_tensor = acts_tensor.reshape(-1, acts_tensor.shape[-1]).float().cpu()
+        all_acts.append(acts_tensor)
         
     acts = torch.cat(all_acts, dim=0)[:n_tokens]
     print(f"Extracted shape: {acts.shape}")
