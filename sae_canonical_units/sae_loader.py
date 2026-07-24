@@ -10,7 +10,6 @@ def load_sae(release, sae_id):
     sae = loaded[0] if isinstance(loaded, tuple) else getattr(loaded, 'sae', loaded)
     
     sae = sae.to(DEVICE).to(torch.float32)
-    sae = sae.to(DEVICE).to(torch.float32)
     sae.eval()
     for p in sae.parameters():
         p.requires_grad_(False)

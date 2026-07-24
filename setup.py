@@ -7,7 +7,6 @@ setup(
     install_requires=[
         "sae-lens",
         "nnsight",
-        "nnterp",
         "transformer-lens",
         "datasets",
         "pandas",
