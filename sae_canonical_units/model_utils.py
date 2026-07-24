@@ -17,8 +17,9 @@ def get_activations(model, layer=8, n_tokens=1024):
     enc = model.tokenizer(raw_text, truncation=True, max_length=n_tokens, return_tensors="pt")
     truncated_text = model.tokenizer.decode(enc["input_ids"][0], skip_special_tokens=True)
 
-    with model.trace(truncated_text):
-        resid = model.layers_output[layer].save()
+    with torch.no_grad(), torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        with model.trace(truncated_text):
+            resid = model.layers_output[layer].save()
 
     acts = resid.value if hasattr(resid, "value") else resid
 
@@ -33,4 +34,4 @@ def get_activations(model, layer=8, n_tokens=1024):
         acts = acts.to("cuda")
 
     print(f"Extracted shape: {acts.shape}")
-    return acts
+    return acts.cpu()
