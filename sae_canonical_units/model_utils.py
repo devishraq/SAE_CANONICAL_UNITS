@@ -25,7 +25,7 @@ def get_activations(model, layer=8, n_tokens=1024, use_remote=False):
     with torch.no_grad():
         with model.trace(inputs, remote=use_remote):
             if use_remote:
-                resid = model.layers_output[layer].save()
+                resid = model.model.layers[layer].output[0].save()
             else:
                 resid = model.layers[layer].output[0].save()
 
