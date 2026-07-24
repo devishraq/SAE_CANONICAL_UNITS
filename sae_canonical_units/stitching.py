@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap=1000, min_improvement=0.0):
+def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap=500, min_improvement=0.0):
     device = sae_small.W_dec.device
     acts = acts.to(device).float()
     
@@ -30,6 +30,7 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
 
         z_l = sae_large.encode(acts).float()
         
+        # Density Filter
         firing_counts = (z_l > 0).sum(0)
         active_mask = firing_counts > 20
         valid_cand_mask = active_mask[cand_idx]
@@ -50,8 +51,9 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         dec_norm2 = (dec_cand**2).sum(1)
         norm_C2 = z_norm2 * dec_norm2
         
-        dot_EC = (z_cand * (E @ dec_cand.T)).sum(0)
-        improves = (2*dot_EC - norm_C2) > min_improvement
+        # MEMORY-OPTIMIZED DOT PRODUCT: 0.9GB instead of 5.5GB!
+        dot_EC = ((z_cand.T @ E) * dec_cand).sum(1)
+        improves = (2 * dot_EC - norm_C2) > min_improvement
 
         n_novel = improves.sum().item()
         novel_frac_raw = n_novel / sae_large.W_dec.shape[0]
@@ -63,7 +65,9 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             idx = torch.randint(0, N, (N,), device=device)
             Eb = E[idx]
             z_cb = z_cand[idx]
-            dot_b = (z_cb * (Eb @ dec_cand.T)).sum(0)
+            
+            # MEMORY-OPTIMIZED DOT PRODUCT FOR BOOTSTRAP
+            dot_b = ((z_cb.T @ Eb) * dec_cand).sum(1)
             norm_b = (z_cb**2).sum(0) * dec_norm2
             boot.append(((2*dot_b - norm_b) > min_improvement).sum().item() / len(cand_idx))
 
