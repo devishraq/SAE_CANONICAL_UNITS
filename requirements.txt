@@ -1,6 +1,5 @@
 sae-lens
 nnsight
-nnterp
 transformer-lens
 datasets
 pandas

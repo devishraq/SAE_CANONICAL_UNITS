@@ -6,7 +6,6 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
     acts = acts.to(device).float()
     
     with torch.no_grad():
-        # Cast to float32 to prevent float16 overflow
         z_s = sae_small.encode(acts).float()
         x_s = sae_small.decode(z_s).float()
         E = acts - x_s
@@ -26,14 +25,22 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             
         cand_idx = torch.where(max_sim < thresh)[0]
 
+        z_l = sae_large.encode(acts).float()
+        
+        # FIX: Density Filter. Only keep candidates that fire >20 times.
+        firing_counts = (z_l > 0).sum(0)
+        active_mask = firing_counts > 20
+        valid_cand_mask = active_mask[cand_idx]
+        cand_idx = cand_idx[valid_cand_mask]
+
         if len(cand_idx) == 0:
             return {
-                "novel_fraction": 0.0, "ci_low": 0.0, "ci_high": 0.0,
+                "novel_fraction": 0.0, "novel_frac_filtered": 0.0,
+                "ci_low": 0.0, "ci_high": 0.0,
                 "n_candidates_geo": 0, "n_novel_func": 0,
                 "base_mse": base_mse, "explained_variance": explained_variance
             }
 
-        z_l = sae_large.encode(acts).float()
         z_cand = z_l[:, cand_idx]
         dec_cand = sae_large.W_dec[cand_idx].float()
 
@@ -45,7 +52,9 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         improves = (2*dot_EC - norm_C2) > min_improvement
 
         n_novel = improves.sum().item()
-        novel_frac = n_novel / sae_large.W_dec.shape[0]
+        # Report raw novel fraction (over all large SAE features) and filtered novel fraction
+        novel_frac_raw = n_novel / sae_large.W_dec.shape[0]
+        novel_frac_filtered = n_novel / len(cand_idx)
 
         N = acts.shape[0]
         boot = []
@@ -55,13 +64,14 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             z_cb = z_cand[idx]
             dot_b = (z_cb * (Eb @ dec_cand.T)).sum(0)
             norm_b = (z_cb**2).sum(0) * dec_norm2
-            boot.append(((2*dot_b - norm_b) > min_improvement).sum().item() / sae_large.W_dec.shape[0])
+            boot.append(((2*dot_b - norm_b) > min_improvement).sum().item() / len(cand_idx))
 
         boot_t = torch.tensor(boot, dtype=torch.float32)
         ci_low, ci_high = torch.quantile(boot_t, torch.tensor([0.025, 0.975])).tolist()
 
     return {
-        "novel_fraction": float(novel_frac),
+        "novel_fraction": float(novel_frac_raw),
+        "novel_frac_filtered": float(novel_frac_filtered),
         "ci_low": float(ci_low), "ci_high": float(ci_high),
         "n_candidates_geo": int(len(cand_idx)),
         "n_novel_func": int(n_novel),
