@@ -6,7 +6,7 @@ from transformer_lens import HookedTransformer
 from nnsight import LanguageModel
 
 HF_MAP = {
-    "gpt2": "openai-community/gpt2",
+    "gpt2": "gpt2",
     "pythia": "EleutherAI/pythia-70m-deduped",
 }
 
