@@ -86,7 +86,7 @@ def run_gemma_experiment():
 
     results = []
     widths_to_test = [
-        ("131k", load_gemma_9b_saes, 0.4, False, False)
+        ("131k", load_gemma_9b_saes, 0.4, True, False)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -114,7 +114,7 @@ def run_llama_experiment():
     torch.cuda.empty_cache(); gc.collect()
 
     small, large = load_llama_31_8b_saes()
-    res = run_one_width(acts, small, large, thresh=0.7, do_meta=False, do_control=False, bs=4096)
+    res = run_one_width(acts, small, large, thresh=0.7, do_meta=True, do_control=False, bs=4096)
     
     del small, large, acts
     torch.cuda.empty_cache(); gc.collect()
