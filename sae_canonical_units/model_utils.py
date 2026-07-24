@@ -2,9 +2,15 @@ import torch
 from datasets import load_dataset
 from nnterp import StandardizedTransformer
 
-def load_model(name="gpt2"):
-    print(f"Loading {name}...")
-    return StandardizedTransformer(name, device_map="auto", torch_dtype=torch.float16)
+def load_model(model_name="meta-llama/Meta-Llama-3.1-8B", use_remote=False):
+    if use_remote:
+        return StandardizedTransformer(
+            model_name,
+            device_map="auto",
+            use_remote=True
+        )
+    else:
+        return StandardizedTransformer(model_name, device_map="auto")
 
 def get_activations(model, layer=8, n_tokens=1024):
     print(f"Extracting activations at layer {layer}...")

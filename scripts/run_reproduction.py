@@ -6,8 +6,8 @@ from sae_canonical_units.controls import random_decoder_control
 from sae_canonical_units.meta_sae import train_meta_sae
 from sae_canonical_units.model_utils import get_activations, load_model
 from sae_canonical_units.sae_loader import (
-    load_gpt2_small_saes,
-    load_gemma_2b_saes,
+    load_gpt2_small_saes, load_gpt2_small_big, load_gpt2_small_98k,
+    load_gemma_2b_saes, load_gemma_2b_big, load_gemma_2b_1m,
     load_pythia_saes,
 )
 from sae_canonical_units.stitching import stitching_novel_fraction
@@ -33,63 +33,82 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
     return res
 
 def run_gpt2_experiment():
-    print("\n=== GPT2 ===")
+    print("\n=== GPT2 Small (Width Curve) ===")
     model = load_model("gpt2")
     acts = get_activations(model, layer=8, n_tokens=1024)
     del model
-    torch.cuda.empty_cache()
-    gc.collect()
-
-    small_768, small_4k, large_16k, large_32k = load_gpt2_small_saes()
-    small = small_4k
+    torch.cuda.empty_cache(); gc.collect()
 
     results = []
-    results.append({
-        "width": "12288",
-        "results": run_one_width(acts, small, large_16k, thresh=0.7, do_meta=True, do_control=True)
-    })
-    torch.cuda.empty_cache()
+    
+    # We define a list of tuples: (Label, Loader Function, thresh, do_meta, do_control)
+    widths_to_test = [
+        ("12288", load_gpt2_small_saes, 0.7, True, True),
+        ("24576", load_gpt2_small_big, 0.7, False, False),
+        ("98304", load_gpt2_small_98k, 0.7, False, False) # 98k might OOM meta-sae, so disabled
+    ]
 
-    results.append({
-        "width": "24576",
-        "results": run_one_width(acts, small, large_32k, thresh=0.7, do_meta=False, do_control=False)
-    })
+    for width, loader, thresh, do_meta, do_control in widths_to_test:
+        print(f"--- GPT2 Width {width} ---")
+        try:
+            small, large = loader()
+            res = run_one_width(acts, small, large, thresh=thresh, do_meta=do_meta, do_control=do_control)
+            results.append({"width": width, "results": res})
+            del small, large
+        except Exception as e:
+            print(f"Failed on width {width}: {e}")
+            results.append({"width": width, "error": str(e)})
+        
+        torch.cuda.empty_cache(); gc.collect()
 
-    del small_768, small_4k, large_16k, large_32k, acts
-    torch.cuda.empty_cache()
-    gc.collect()
+    del acts
+    torch.cuda.empty_cache(); gc.collect()
     return results
 
 def run_gemma_experiment():
-    print("\n=== GEMMA 2B ===")
+    print("\n=== GEMMA 2B (Width Curve) ===")
     model = load_model("google/gemma-2-2b")
     acts = get_activations(model, layer=10, n_tokens=1024)
     del model
-    torch.cuda.empty_cache()
-    gc.collect()
+    torch.cuda.empty_cache(); gc.collect()
 
-    small, large = load_gemma_2b_saes()
-    res = run_one_width(acts, small, large, thresh=0.4, do_meta=False, do_control=False, bs=4096)
+    results = []
+    
+    widths_to_test = [
+        ("65k", load_gemma_2b_saes, 0.4, False, False),
+        ("262k", load_gemma_2b_big, 0.4, False, False),
+        ("1m", load_gemma_2b_1m, 0.4, False, False) # 1M SAE is massive, likely to OOM meta-sae
+    ]
 
-    del small, large, acts
-    torch.cuda.empty_cache()
-    gc.collect()
-    return [{"width": "65k", "results": res}]
+    for width, loader, thresh, do_meta, do_control in widths_to_test:
+        print(f"--- Gemma Width {width} ---")
+        try:
+            small, large = loader()
+            res = run_one_width(acts, small, large, thresh=thresh, do_meta=do_meta, do_control=do_control, bs=4096)
+            results.append({"width": width, "results": res})
+            del small, large
+        except Exception as e:
+            print(f"Failed on width {width}: {e}")
+            results.append({"width": width, "error": str(e)})
+        
+        torch.cuda.empty_cache(); gc.collect()
+
+    del acts
+    torch.cuda.empty_cache(); gc.collect()
+    return results
 
 def run_pythia_experiment():
     print("\n=== PYTHIA 70M ===")
     model = load_model("EleutherAI/pythia-70m-deduped")
     acts = get_activations(model, layer=3, n_tokens=1024)
     del model
-    torch.cuda.empty_cache()
-    gc.collect()
+    torch.cuda.empty_cache(); gc.collect()
 
     small, large = load_pythia_saes()
     res = run_one_width(acts, small, large, thresh=0.7, do_meta=True, do_control=True)
 
     del small, large, acts
-    torch.cuda.empty_cache()
-    gc.collect()
+    torch.cuda.empty_cache(); gc.collect()
     return [{"width": "16k", "results": res}]
 
 def main():
