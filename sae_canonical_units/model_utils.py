@@ -36,7 +36,7 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=8192, us
         hf_id = HF_MAP.get(model_name, model_name)
         ht = HookedTransformer.from_pretrained(hf_id, device="cuda", dtype=torch.float16)
         raw = ""
-        while len(ht.to_tokens(raw).shape[1]) < n_tokens+512:
+        while ht.to_tokens(raw).shape[1] < n_tokens+512:
             raw += " " + ds[random.randint(0,len(ds)-1)]["text"]
         tokens = ht.to_tokens(raw)[:, :n_tokens+512]
 
