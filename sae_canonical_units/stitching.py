@@ -4,7 +4,7 @@ import torch.nn.functional as F
 def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap=500, min_improvement=0.0):
     device = sae_small.W_dec.device
     # Cast acts to SAE's native dtype to prevent scaling mismatch
-    acts = acts.to(device).to(se_small.W_dec.dtype)
+    acts = acts.to(device).to(sae_small.W_dec.dtype)
     
     with torch.no_grad():
         z_s = sae_small.encode(acts)
