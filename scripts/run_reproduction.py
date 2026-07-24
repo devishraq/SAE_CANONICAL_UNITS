@@ -64,9 +64,9 @@ def run_gpt2_experiment():
     return results
 
 def run_gemma_experiment():
-    print("\n=== GEMMA 2B (Local) ===")
-    model = load_model("google/gemma-2-2b", use_remote=False)
-    acts = get_activations(model, layer=10, n_tokens=1024)
+    print("\n=== GEMMA 2B (Remote NDIF) ===")
+    model = load_model("google/gemma-2-2b", use_remote=True)
+    acts = get_activations(model, layer=10, n_tokens=1024, use_remote=True)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
@@ -109,7 +109,7 @@ def run_pythia_experiment():
 def run_llama_experiment():
     print("\n=== LLAMA 3.1 8B (Remote NDIF) ===")
     model = load_model("meta-llama/Llama-3.1-8B", use_remote=True)
-    acts = get_activations(model, layer=12, n_tokens=1024)
+    acts = get_activations(model, layer=12, n_tokens=1024, use_remote=True)
     
     del model
     torch.cuda.empty_cache(); gc.collect()
@@ -127,7 +127,7 @@ def main():
         ("gpt2_small_L8", run_gpt2_experiment),
         ("gemma_2b_L10", run_gemma_experiment),
         ("pythia_70m_L3", run_pythia_experiment),
-        ("llama_31_8b_L12", run_llama_experiment),
+        ("llama_31_8b_L12", run_llama_experiment)
     ]:
         try:
             all_results[name] = fn()
