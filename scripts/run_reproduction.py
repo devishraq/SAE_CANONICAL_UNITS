@@ -6,8 +6,8 @@ from sae_canonical_units.controls import random_decoder_control
 from sae_canonical_units.meta_sae import train_meta_sae
 from sae_canonical_units.model_utils import get_activations, load_model
 from sae_canonical_units.sae_loader import (
-    load_gpt2_small_saes, load_gpt2_small_big, load_gpt2_small_98k,
-    load_gemma_2b_saes, load_gemma_2b_big, load_gemma_2b_1m,
+    load_gpt2_small_saes, load_gpt2_small_big,
+    load_gemma_2b_saes,
     load_pythia_saes,
     load_llama_31_8b_saes
 )
@@ -41,12 +41,9 @@ def run_gpt2_experiment():
     torch.cuda.empty_cache(); gc.collect()
 
     results = []
-    
-    # (Label, Loader Function, thresh, do_meta, do_control)
     widths_to_test = [
         ("12288", load_gpt2_small_saes, 0.7, True, True),
-        ("24576", load_gpt2_small_big, 0.7, False, False),
-        ("98304", load_gpt2_small_98k, 0.7, False, False) 
+        ("24576", load_gpt2_small_big, 0.7, False, False)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -67,18 +64,15 @@ def run_gpt2_experiment():
     return results
 
 def run_gemma_experiment():
-    print("\n=== GEMMA 2B (Width Curve) ===")
-    model = load_model("google/gemma-2-2b")
+    print("\n=== GEMMA 2B (Local) ===")
+    model = load_model("google/gemma-2-2b", use_remote=False)
     acts = get_activations(model, layer=10, n_tokens=1024)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
     results = []
-    
     widths_to_test = [
-        ("65k", load_gemma_2b_saes, 0.4, False, False),
-        ("262k", load_gemma_2b_big, 0.4, False, False),
-        ("1m", load_gemma_2b_1m, 0.4, False, False)
+        ("65k", load_gemma_2b_saes, 0.4, False, False)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -121,7 +115,6 @@ def run_llama_experiment():
     torch.cuda.empty_cache(); gc.collect()
 
     small, large = load_llama_31_8b_saes()
-    # 131k width SAE is huge, keep batch size high and skip meta-sae to be safe
     res = run_one_width(acts, small, large, thresh=0.7, do_meta=False, do_control=False, bs=4096)
     
     del small, large, acts
