@@ -4,31 +4,48 @@ import torch.nn.functional as F
 from .stitching import stitching_novel_fraction
 
 def random_decoder_control(sae_small, sae_large, acts, thresh=0.7):
-    sae_shuffled = copy.deepcopy(sae_large)
+    print("Running Isotropic Random Control...")
+    device = sae_large.W_dec.device
+    acts = acts.to(device).float()
     
-    perm = torch.randperm(sae_shuffled.W_dec.shape[0], device=sae_shuffled.W_dec.device)
-    sae_shuffled.W_dec.data = sae_shuffled.W_dec.data[perm]
+    # 1. Generate Isotropic Random Decoder with same norm distribution
+    W = sae_large.W_dec.float().clone()
+    norms = W.norm(dim=1, keepdim=True)
+    rand = torch.randn_like(W)
+    rand = rand / rand.norm(dim=1, keepdim=True) * norms
     
-    small_n = F.normalize(sae_small.W_dec, dim=1)
-    shuffled_n = F.normalize(sae_shuffled.W_dec, dim=1)
-    sim = shuffled_n @ small_n.T
-    max_sim, _ = sim.max(dim=1)
+    # 2. Calculate geometric novelty manually (should be ~99%)
+    small_n = F.normalize(sae_small.W_dec.float(), dim=1)
+    rand_n = F.normalize(rand, dim=1)
+    sim = rand_n @ small_n.T
+    max_sim = sim.max(dim=1).values
     geo_frac = (max_sim < thresh).float().mean().item()
     
-    res = stitching_novel_fraction(sae_small, sae_shuffled, acts, thresh=thresh, n_bootstrap=100)
-    func_frac = res["novel_fraction"]
-    
+    # 3. Calculate functional novelty using the random decoder
+    with torch.no_grad():
+        z_s = sae_small.encode(acts).float()
+        x_s = sae_small.decode(z_s).float()
+        E = acts - x_s
+        
+        z_l = sae_large.encode(acts).float()
+        cand_idx = torch.where(max_sim < thresh)[0]
+        
+        if len(cand_idx) == 0:
+            return {"shuffled_geo_novel_frac": geo_frac, "shuffled_func_novel_frac": 0.0}
+            
+        z_cand = z_l[:, cand_idx]
+        dec_cand = rand[cand_idx]
+        
+        z_norm2 = (z_cand**2).sum(0)
+        dec_norm2 = (dec_cand**2).sum(1)
+        norm_C2 = z_norm2 * dec_norm2
+        
+        dot_EC = (z_cand * (E @ dec_cand.T)).sum(0)
+        improves = (2 * dot_EC - norm_C2) > 0.0
+        func_frac = improves.sum().item() / sae_large.W_dec.shape[0]
+        
     return {
         "shuffled_geo_novel_frac": geo_frac,
         "shuffled_func_novel_frac": func_frac,
         "note": "Geo should be ~99%, Func should be ~0%. Proves metric isn't random."
-    }
-
-def same_width_control(sae_large_a, sae_large_b, acts, thresh=0.7):
-    if sae_large_b is None:
-        return {"control_note": "no second 16k checkpoint found"}
-    res = stitching_novel_fraction(sae_large_a, sae_large_b, acts, thresh=thresh, n_bootstrap=200)
-    return {
-        "same_width_novel_frac": res["novel_fraction"], 
-        "same_width_ci": (res["ci_low"], res["ci_high"])
     }

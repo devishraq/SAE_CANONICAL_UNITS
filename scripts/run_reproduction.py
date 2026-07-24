@@ -9,12 +9,13 @@ from sae_canonical_units.sae_loader import (
     load_gpt2_small_saes, load_gpt2_small_big,
     load_gemma_9b_saes,
     load_pythia_saes,
-    load_llama_31_8b_saes
+    load_llama_31_8b_saes,
+    load_sae
 )
 from sae_canonical_units.stitching import stitching_novel_fraction
 
-def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=2048):
-    res = stitching_novel_fraction(small, large, acts, thresh=thresh, n_bootstrap=200)
+def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=2048, n_bootstrap=1000):
+    res = stitching_novel_fraction(small, large, acts, thresh=thresh, n_bootstrap=n_bootstrap)
 
     if do_meta:
         try:
@@ -26,7 +27,7 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
 
     if do_control:
         try:
-            res["controls"] = {"random": random_decoder_control(small, large, acts)}
+            res["controls"] = {"random": random_decoder_control(small, large, acts, thresh=thresh)}
         except Exception as e:
             print(f"control failed: {e}")
             res["controls"] = None
@@ -36,11 +37,26 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
 def run_gpt2_experiment():
     print("\n=== GPT2 Small (Local T4) ===")
     model = load_model("gpt2", use_remote=False)
-    acts = get_activations(model, layer=8, n_tokens=1024, use_remote=False)
+    acts = get_activations(model, "gpt2", layer=8, n_tokens=8192)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
     results = []
+    
+    # 1. Threshold Sweep (12k width)
+    thresholds = [0.5, 0.6, 0.7, 0.8]
+    for t in thresholds:
+        print(f"--- GPT2 Threshold Sweep: {t} ---")
+        try:
+            small, large = load_gpt2_small_saes()
+            res = run_one_width(acts, small, large, thresh=t, do_meta=False, do_control=False, n_bootstrap=500)
+            results.append({"experiment": "threshold_sweep", "threshold": t, "results": res})
+            del small, large
+        except Exception as e:
+            print(f"Failed on threshold {t}: {e}")
+        torch.cuda.empty_cache(); gc.collect()
+
+    # 2. Original Baselines (12k and 24k)
     widths_to_test = [
         ("12288", load_gpt2_small_saes, 0.7, True, True),
         ("24576", load_gpt2_small_big, 0.7, False, False)
@@ -56,7 +72,6 @@ def run_gpt2_experiment():
         except Exception as e:
             print(f"Failed on width {width}: {e}")
             results.append({"width": width, "error": str(e)})
-        
         torch.cuda.empty_cache(); gc.collect()
 
     del acts
@@ -66,12 +81,26 @@ def run_gpt2_experiment():
 def run_pythia_experiment():
     print("\n=== PYTHIA 70M (Local T4) ===")
     model = load_model("EleutherAI/pythia-70m-deduped", use_remote=False)
-    acts = get_activations(model, layer=3, n_tokens=1024, use_remote=False)
+    acts = get_activations(model, "pythia", layer=3, n_tokens=8192)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
     small, large = load_pythia_saes()
     res = run_one_width(acts, small, large, thresh=0.7, do_meta=True, do_control=True)
+
+    # Same-Width Control (Trainer 0 vs Trainer 1)
+    print("--- Pythia Same-Width Control (Trainer 0 vs 1) ---")
+    try:
+        large_b = load_sae("sae_bench_pythia70m_sweep_standard_ctx128_0712", "blocks.3.hook_resid_post__trainer_1")
+        same_width_res = stitching_novel_fraction(large, large_b, acts, thresh=0.7, n_bootstrap=500)
+        res["same_width_control"] = {
+            "novel_fraction": same_width_res["novel_fraction"],
+            "ci_low": same_width_res["ci_low"],
+            "ci_high": same_width_res["ci_high"]
+        }
+        del large_b
+    except Exception as e:
+        print(f"Same-width control failed: {e}")
 
     del small, large, acts
     torch.cuda.empty_cache(); gc.collect()
@@ -80,7 +109,7 @@ def run_pythia_experiment():
 def run_gemma_experiment():
     print("\n=== GEMMA 9B IT (Remote NDIF) ===")
     model = load_model("google/gemma-2-9b-it", use_remote=True)
-    acts = get_activations(model, layer=20, n_tokens=1024, use_remote=True)
+    acts = get_activations(model, "gemma", layer=20, n_tokens=8192)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
@@ -93,13 +122,12 @@ def run_gemma_experiment():
         print(f"--- Gemma Width {width} ---")
         try:
             small, large = loader()
-            res = run_one_width(acts, small, large, thresh=thresh, do_meta=do_meta, do_control=do_control, bs=4096)
+            res = run_one_width(acts, small, large, thresh=thresh, do_meta=do_meta, do_control=do_control, bs=4096, n_bootstrap=500)
             results.append({"width": width, "results": res})
             del small, large
         except Exception as e:
             print(f"Failed on width {width}: {e}")
             results.append({"width": width, "error": str(e)})
-        
         torch.cuda.empty_cache(); gc.collect()
 
     del acts
@@ -109,12 +137,12 @@ def run_gemma_experiment():
 def run_llama_experiment():
     print("\n=== LLAMA 3.1 8B (Remote NDIF) ===")
     model = load_model("meta-llama/Llama-3.1-8B", use_remote=True)
-    acts = get_activations(model, layer=12, n_tokens=1024, use_remote=True)
+    acts = get_activations(model, "llama", layer=12, n_tokens=8192)
     del model
     torch.cuda.empty_cache(); gc.collect()
 
     small, large = load_llama_31_8b_saes()
-    res = run_one_width(acts, small, large, thresh=0.7, do_meta=True, do_control=False, bs=4096)
+    res = run_one_width(acts, small, large, thresh=0.7, do_meta=True, do_control=False, bs=4096, n_bootstrap=500)
     
     del small, large, acts
     torch.cuda.empty_cache(); gc.collect()

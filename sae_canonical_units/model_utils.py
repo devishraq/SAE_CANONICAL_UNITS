@@ -1,41 +1,43 @@
 import torch
+import random
 from datasets import load_dataset
-from nnterp import StandardizedTransformer
 from nnsight import LanguageModel
 
 def load_model(name="gpt2", use_remote=False):
-    print(f"Loading {name} remote={use_remote}...")
+    print(f"Loading {name} remote={use_remote} (float16)...")
     if use_remote:
-        return LanguageModel(name, remote=True)
+        return LanguageModel(name, remote=True, torch_dtype=torch.float16)
     else:
-        return StandardizedTransformer(name, device_map="auto", torch_dtype=torch.float16)
+        return LanguageModel(name, device_map="auto", torch_dtype=torch.float16)
 
-def get_activations(model, layer=8, n_tokens=1024, use_remote=False):
-    print(f"Extracting activations at layer {layer}...")
+def get_activations(model, model_name, layer, n_tokens=51200, batch_size=1024):
+    print(f"Extracting {n_tokens} activations at layer {layer} (batched)...")
     ds = load_dataset("NeelNanda/pile-10k", split="train")
-    raw_text = " ".join([ds[i]["text"] for i in range(5)])
     
-    enc = model.tokenizer(raw_text, truncation=True, max_length=n_tokens, return_tensors="pt")
+    random.seed(42)
+    indices = random.sample(range(len(ds)), 50)
+    raw_text = " ".join([ds[i]["text"] for i in indices])
     
-    if not use_remote:
-        inputs = {k: v.to("cuda") for k, v in enc.items()}
-    else:
-        inputs = enc
-
-    with torch.no_grad():
-        with model.trace(inputs, remote=use_remote):
-            if use_remote:
+    input_ids = model.tokenizer(raw_text, return_tensors="pt")["input_ids"][0]
+    
+    all_acts = []
+    for i in range(0, n_tokens, batch_size):
+        batch = input_ids[i:i+batch_size].unsqueeze(0)
+        if batch.shape[1] == 0: break
+            
+        with model.trace(batch):
+            # Native HuggingFace paths! No nnterp standardization!
+            if "gpt2" in model_name:
+                resid = model.transformer.h[layer].output[0].save()
+            elif "pythia" in model_name:
+                resid = model.gpt_neox.layers[layer].output[0].save()
+            else: # Llama & Gemma
                 resid = model.model.layers[layer].output[0].save()
-            else:
-                resid = model.layers[layer].output[0].save()
-
-    acts = resid.value if hasattr(resid, "value") else resid
-    if hasattr(acts, "value"):
-        acts = acts.value
-
-    if acts.dim() == 3:
-        acts = acts[0]
+                
+        # Move to CPU immediately to save VRAM, cast to float32 for math safety
+        acts = resid.value[0].float().cpu()
+        all_acts.append(acts)
         
-    acts = acts.reshape(-1, acts.shape[-1])[:n_tokens].float().detach()
+    acts = torch.cat(all_acts, dim=0)[:n_tokens]
     print(f"Extracted shape: {acts.shape}")
-    return acts.cpu()
+    return acts
