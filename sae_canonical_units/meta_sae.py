@@ -46,7 +46,6 @@ def train_meta_sae(target_sae, hidden=2048, k=4, epochs=1000, lr=3e-4, bs=2048):
         if (ep + 1) % 100 == 0:
             with torch.no_grad():
                 recon, _ = sae(data)
-                # FIX: Use MSE / Var, not Var(error) / Var(data)
                 var_exp = 1 - (recon - data).pow(2).mean() / data.var()
                 print(f"meta ep {ep + 1} loss {loss.item():.5f} var_exp {var_exp.item():.3f}")
                 

@@ -8,20 +8,17 @@ def random_decoder_control(sae_small, sae_large, acts, thresh=0.7):
     device = sae_large.W_dec.device
     acts = acts.to(device).float()
     
-    # 1. Generate Isotropic Random Decoder with same norm distribution
     W = sae_large.W_dec.float().clone()
     norms = W.norm(dim=1, keepdim=True)
     rand = torch.randn_like(W)
     rand = rand / rand.norm(dim=1, keepdim=True) * norms
     
-    # 2. Calculate geometric novelty manually (should be ~99%)
     small_n = F.normalize(sae_small.W_dec.float(), dim=1)
     rand_n = F.normalize(rand, dim=1)
     sim = rand_n @ small_n.T
     max_sim = sim.max(dim=1).values
     geo_frac = (max_sim < thresh).float().mean().item()
-    
-    # 3. Calculate functional novelty using the random decoder
+
     with torch.no_grad():
         z_s = sae_small.encode(acts).float()
         x_s = sae_small.decode(z_s).float()

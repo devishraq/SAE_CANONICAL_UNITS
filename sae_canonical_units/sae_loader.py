@@ -5,11 +5,17 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 def load_sae(release, sae_id):
     print(f"Loading {release} / {sae_id}")
-    out = SAE.from_pretrained(release=release, sae_id=sae_id, device=DEVICE)
-    sae = out[0] if isinstance(out, tuple) else out
+    loaded = SAE.from_pretrained(release=release, sae_id=sae_id, device=str(DEVICE))
+    
+    sae = loaded[0] if isinstance(loaded, tuple) else getattr(loaded, 'sae', loaded)
+    
+    sae = sae.to(DEVICE).to(torch.float32)
+    sae = sae.to(DEVICE).to(torch.float32)
     sae.eval()
     for p in sae.parameters():
-        p.requires_grad = False
+        p.requires_grad_(False)
+        
+    assert sae.cfg.hook_name is not None, "SAE config missing hook_name!"
     return sae
 
 def load_gpt2_small_saes():

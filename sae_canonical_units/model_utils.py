@@ -20,8 +20,6 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, b
     
     input_ids = model.tokenizer(raw_text, return_tensors="pt")["input_ids"][0]
     
-    # FIX: If hook is 'pre', we must extract the output of the PREVIOUS layer
-    # because 'pre_8' is exactly equal to 'post_7'.
     extract_layer = layer - 1 if hook_type == "pre" else layer
     
     all_acts = []
@@ -34,7 +32,7 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=40960, b
                 resid = model.transformer.h[extract_layer].output[0].save()
             elif "pythia" in model_name:
                 resid = model.gpt_neox.layers[extract_layer].output[0].save()
-            else: # Llama & Gemma
+            else:
                 resid = model.model.layers[extract_layer].output[0].save()
                 
         acts = resid.value[0].float().cpu()

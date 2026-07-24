@@ -13,6 +13,9 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         base_mse = (E**2).mean().item()
         acts_var = acts.var().item()
         explained_variance = 1.0 - base_mse / (acts_var + 1e-8)
+        
+        if explained_variance < 0:
+            raise ValueError(f"SAE/activation mismatch EV={explained_variance}. Check model hooks.")
 
         small_n = F.normalize(sae_small.W_dec.float(), dim=1)
         large_n = F.normalize(sae_large.W_dec.float(), dim=1)
@@ -27,7 +30,6 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
 
         z_l = sae_large.encode(acts).float()
         
-        # FIX: Density Filter. Only keep candidates that fire >20 times.
         firing_counts = (z_l > 0).sum(0)
         active_mask = firing_counts > 20
         valid_cand_mask = active_mask[cand_idx]
@@ -52,7 +54,6 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         improves = (2*dot_EC - norm_C2) > min_improvement
 
         n_novel = improves.sum().item()
-        # Report raw novel fraction (over all large SAE features) and filtered novel fraction
         novel_frac_raw = n_novel / sae_large.W_dec.shape[0]
         novel_frac_filtered = n_novel / len(cand_idx)
 
