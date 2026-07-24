@@ -27,7 +27,7 @@ def get_activations(model, layer=8, n_tokens=1024, use_remote=False):
             if use_remote:
                 resid = model.layers_output[layer].save()
             else:
-                resid = model.layers_output[layer].save()
+                resid = model.layers[layer].output[0].save()
 
     acts = resid.value if hasattr(resid, "value") else resid
     if hasattr(acts, "value"):
