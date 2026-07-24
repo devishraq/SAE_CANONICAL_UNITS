@@ -3,17 +3,18 @@ import torch.nn.functional as F
 
 def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap=500, min_improvement=0.0):
     device = sae_small.W_dec.device
-    # Cast acts to SAE's native dtype to prevent scaling mismatch
-    acts = acts.to(device).to(sae_small.W_dec.dtype)
+    acts = acts.to(device).float() # MUST be float32 for stable SAE encoding
     
     with torch.no_grad():
         z_s = sae_small.encode(acts)
         x_s = sae_small.decode(z_s)
         
-        # Cast to float32 for safe MSE accumulation
         E = (acts - x_s).float()
         acts_f = acts.float()
-
+        
+        del z_s, x_s
+        torch.cuda.empty_cache()
+        
         base_mse = (E**2).mean().item()
         acts_var = acts_f.var().item()
         explained_variance = 1.0 - base_mse / (acts_var + 1e-8)
@@ -32,9 +33,10 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             
         cand_idx = torch.where(max_sim < thresh)[0]
 
-        z_l = sae_large.encode(acts)
+        z_l = sae_large.encode(acts_f.to(sae_large.W_dec.dtype)).float() # Encode in native dtype, return to float32
+        del acts_f
+        torch.cuda.empty_cache()
         
-        # Density Filter
         firing_counts = (z_l > 0).sum(0)
         active_mask = firing_counts > 20
         valid_cand_mask = active_mask[cand_idx]
@@ -49,8 +51,6 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
             }
 
         z_cand = z_l[:, cand_idx].float()
-        
-        # FIX: Delete the massive z_l tensor to free 4GB of VRAM!
         del z_l
         torch.cuda.empty_cache()
         
@@ -60,7 +60,6 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         dec_norm2 = (dec_cand**2).sum(1)
         norm_C2 = z_norm2 * dec_norm2
         
-        # MEMORY-OPTIMIZED DOT PRODUCT
         dot_EC = ((z_cand.T @ E) * dec_cand).sum(1)
         improves = (2 * dot_EC - norm_C2) > min_improvement
 
@@ -68,7 +67,7 @@ def stitching_novel_fraction(sae_small, sae_large, acts, thresh=0.7, n_bootstrap
         novel_frac_raw = n_novel / sae_large.W_dec.shape[0]
         novel_frac_filtered = n_novel / len(cand_idx)
 
-        N = acts_f.shape[0]
+        N = E.shape[0]
         boot = []
         for _ in range(n_bootstrap):
             idx = torch.randint(0, N, (N,), device=device)
