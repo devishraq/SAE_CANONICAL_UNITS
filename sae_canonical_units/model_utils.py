@@ -22,6 +22,8 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=8192, us
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
+    torch.cuda.manual_seed_all(42)
+
     
     print(f"Extracting {n_tokens} {model_name} L{layer} {hook_type} remote={use_remote}")
     ds = load_dataset("NeelNanda/pile-10k", split="train")

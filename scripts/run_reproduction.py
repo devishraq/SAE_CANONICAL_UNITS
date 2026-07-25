@@ -62,7 +62,7 @@ def run_gpt2_experiment():
 
     widths_to_test = [
         ("3k->12k", load_gpt2_small_saes, 0.7, True, True),
-        ("3k->24k", load_gpt2_small_big, 0.7, False, False)
+        ("3k->24k", load_gpt2_small_big, 0.7, True, False)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
