@@ -62,7 +62,7 @@ def run_gpt2_experiment():
 
     widths_to_test = [
         ("3k->12k", load_gpt2_small_saes, 0.7, True, True),
-        ("3k->24k", load_gpt2_small_big, 0.7, True, False)
+        ("3k->24k", load_gpt2_small_big, 0.7, True, True)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -157,7 +157,7 @@ def main():
         ("gpt2_small_L8", run_gpt2_experiment),
         ("pythia_70m_L3", run_pythia_experiment),
         ("gemma_9b_it_L20", run_gemma_experiment),
-        # ("llama_31_8b_L12", run_llama_experiment)
+        ("llama_31_8b_L12", run_llama_experiment)
     ]:
         try:
             all_results[name] = fn()

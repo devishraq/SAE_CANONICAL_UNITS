@@ -45,7 +45,6 @@ def shuffled_decoder_control(sae_small, sae_large, acts, thresh=0.7):
     device = sae_large.W_dec.device
     acts = acts.to(device).float()
 
-    # FIX: permute ROWS (n_latents), not columns
     perm = torch.randperm(sae_large.W_dec.shape[0])
     W_shuf = sae_large.W_dec[perm, :].clone()
 
