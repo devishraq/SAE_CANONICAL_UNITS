@@ -157,7 +157,7 @@ def main():
         ("gpt2_small_L8", run_gpt2_experiment),
         ("pythia_70m_L3", run_pythia_experiment),
         ("gemma_9b_it_L20", run_gemma_experiment),
-        ("llama_31_8b_L12", run_llama_experiment)
+        # ("llama_31_8b_L12", run_llama_experiment)
     ]:
         try:
             all_results[name] = fn()
