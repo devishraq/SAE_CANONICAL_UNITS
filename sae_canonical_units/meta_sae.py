@@ -1,3 +1,4 @@
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,9 +6,9 @@ import torch.nn.functional as F
 class TopKSAE(nn.Module):
     def __init__(self, d_in, hidden, k):
         super().__init__()
-        self.enc = nn.Linear(d_in, hidden, bias=True)
+        self.enc = nn.Linear(d_in, hidden, bias=False)
         self.b_enc = nn.Parameter(torch.zeros(hidden))
-        self.dec = nn.Linear(hidden, d_in, bias=True)
+        self.dec = nn.Linear(hidden, d_in, bias=False)
         self.k = k
         
         nn.init.kaiming_uniform_(self.enc.weight)

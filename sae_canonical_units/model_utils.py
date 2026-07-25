@@ -1,5 +1,7 @@
+
 import torch
 import random
+import numpy as np
 import gc
 from datasets import load_dataset
 from transformer_lens import HookedTransformer
@@ -17,16 +19,22 @@ def load_model(name="gpt2", use_remote=False):
     return None
 
 def get_activations(model, model_name, layer, hook_type="pre", n_tokens=8192, use_remote=False):
+    random.seed(42)
+    np.random.seed(42)
+    torch.manual_seed(42)
+    
     print(f"Extracting {n_tokens} {model_name} L{layer} {hook_type} remote={use_remote}")
     ds = load_dataset("NeelNanda/pile-10k", split="train")
 
     if use_remote:
         tok = model.tokenizer
         raw = ds[0]["text"]
+
         while len(tok(raw)["input_ids"]) < n_tokens + 1024:
             raw += " " + ds[random.randint(0, len(ds)-1)]["text"]
         ids = tok(raw)["input_ids"]
         all_acts = []
+
         for i in range(0, n_tokens, 1024):
             batch = ids[i:i+1024]
             if not batch: break
@@ -41,7 +49,6 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=8192, us
         hf_id = HF_MAP.get(model_name, model_name)
         ht = HookedTransformer.from_pretrained(hf_id, device="cuda", dtype=torch.float16)
 
-        # use raw tokenizer for counting, not to_tokens which truncates to 1024
         raw = ds[0]["text"]
         while len(ht.tokenizer.encode(raw)) < n_tokens:
             raw += " " + ds[random.randint(0, len(ds)-1)]["text"]
@@ -51,6 +58,7 @@ def get_activations(model, model_name, layer, hook_type="pre", n_tokens=8192, us
         hook_name = f"blocks.{layer}.hook_resid_{hook_type}"
         all_acts = []
         BS = 512
+
         for i in range(0, n_tokens, BS):
             batch = tokens[:, i:i+BS]
             _, cache = ht.run_with_cache(batch)

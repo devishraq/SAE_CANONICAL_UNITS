@@ -1,8 +1,9 @@
+
 import gc
 import json
 import traceback
 import torch
-from sae_canonical_units.controls import random_decoder_control
+from sae_canonical_units.controls import random_decoder_control, shuffled_decoder_control
 from sae_canonical_units.meta_sae import train_meta_sae
 from sae_canonical_units.model_utils import get_activations, load_model
 from sae_canonical_units.sae_loader import (
@@ -27,9 +28,13 @@ def run_one_width(acts, small, large, thresh, do_meta=True, do_control=True, bs=
 
     if do_control:
         try:
-            res["controls"] = {"random": random_decoder_control(small, large, acts, thresh=thresh)}
+            res["controls"] = {
+                "random": random_decoder_control(small, large, acts, thresh=thresh),
+                "shuffled": shuffled_decoder_control(small, large, acts, thresh=thresh)
+            }
         except Exception as e:
             print(f"control failed: {e}")
+            traceback.print_exc()
             res["controls"] = None
 
     return res
@@ -45,19 +50,19 @@ def run_gpt2_experiment():
     
     thresholds = [0.5, 0.6, 0.7, 0.8]
     for t in thresholds:
-        print(f"--- GPT2 Threshold Sweep: {t} ---")
+        print(f"--- GPT2 Threshold Sweep: 3k->12k t={t} ---")
         try:
             small, large = load_gpt2_small_saes()
             res = run_one_width(acts, small, large, thresh=t, do_meta=False, do_control=False, n_bootstrap=500)
-            results.append({"experiment": "threshold_sweep", "threshold": t, "results": res})
+            results.append({"experiment": "threshold_sweep", "threshold": t, "width": "3k->12k", "results": res})
             del small, large
         except Exception as e:
             print(f"Failed on threshold {t}: {e}")
         torch.cuda.empty_cache(); gc.collect()
 
     widths_to_test = [
-        ("12288", load_gpt2_small_saes, 0.7, True, True),
-        ("24576", load_gpt2_small_big, 0.7, False, False)
+        ("3k->12k", load_gpt2_small_saes, 0.7, True, True),
+        ("3k->24k", load_gpt2_small_big, 0.7, False, False)
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
@@ -113,11 +118,11 @@ def run_gemma_experiment():
 
     results = []
     widths_to_test = [
-        ("131k", load_gemma_9b_saes, 0.4, True, False)
+        ("16k->131k", load_gemma_9b_saes, 0.7, True, False)  # FIX #2: was 0.4, now 0.7
     ]
 
     for width, loader, thresh, do_meta, do_control in widths_to_test:
-        print(f"--- Gemma Width {width} ---")
+        print(f"--- Gemma Width {width} t={thresh} ---")
         try:
             small, large = loader()
             res = run_one_width(acts, small, large, thresh=thresh, do_meta=do_meta, do_control=do_control, bs=4096, n_bootstrap=500)
